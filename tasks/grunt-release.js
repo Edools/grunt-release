@@ -13,11 +13,12 @@ var Q = require('q');
 
 module.exports = function(grunt){
   grunt.registerTask('release', 'bump version, git tag, git push, npm publish', function(type){
-    
+
     //defaults
     var options = this.options({
       bump: true,
       file: grunt.config('pkgFile') || 'package.json',
+      bowerFile: 'bower.json',
       add: true,
       commit: true,
       tag: true,
@@ -26,7 +27,7 @@ module.exports = function(grunt){
       npm : true
     });
 
-    var config = setup(options.file, type);
+    var config = setup(options.before, options.file, options.bowerFile, type);
     var templateOptions = {
       data: {
         version: config.newVersion
@@ -44,7 +45,9 @@ module.exports = function(grunt){
     }
 
     Q()
+      .then(ifEnabled('before', before))
       .then(ifEnabled('bump', bump))
+      .then(ifEnabled('bumpBower', bumpBower))
       .then(ifEnabled('add', add))
       .then(ifEnabled('commit', commit))
       .then(ifEnabled('tag', tag))
@@ -58,13 +61,26 @@ module.exports = function(grunt){
       .finally(done);
 
 
-    function setup(file, type){
+    function setup(before, file, bowerFile, type){
       var pkg = grunt.file.readJSON(file);
+      var bower = grunt.file.readJSON(bowerFile);
       var newVersion = pkg.version;
+      var newBowerVersion = bower.version;
       if (options.bump) {
         newVersion = semver.inc(pkg.version, type || 'patch');
       }
-      return {file: file, pkg: pkg, newVersion: newVersion};
+      if (options.bumpBower) {
+        newBowerVersion = semver.inc(bower.version, type || 'patch');
+      }
+      return {
+        file: file,
+        bowerFile: bowerFile,
+        pkg: pkg,
+        bower: bower,
+        newVersion: newVersion,
+        newBowerVersion: newBowerVersion,
+        before: before
+      };
     }
 
     function getNpmTag(){
@@ -88,7 +104,7 @@ module.exports = function(grunt){
       else {
         var success = shell.exec(cmd, {silent:true}).code === 0;
 
-        if (success){ 
+        if (success){
           grunt.log.ok(msg || cmd);
           deferred.resolve();
         }
@@ -101,11 +117,11 @@ module.exports = function(grunt){
     }
 
     function add(){
-      return run('git add ' + config.file, ' staged ' + config.file);
+      return run('git add --all', ' staged all changed files');
     }
 
     function commit(){
-      return run('git commit '+ config.file +' -m "'+ commitMessage +'"', 'committed ' + config.file);
+      return run('git commit -m "'+ commitMessage +'"', 'committed all staged files');
     }
 
     function tag(){
@@ -124,7 +140,7 @@ module.exports = function(grunt){
       var cmd = 'npm publish';
       var msg = 'published version '+ config.newVersion +' to npm';
       var npmtag = getNpmTag();
-      if (npmtag){ 
+      if (npmtag){
         cmd += ' --tag ' + npmtag;
         msg += ' with a tag of "' + npmtag + '"';
       }
@@ -137,13 +153,28 @@ module.exports = function(grunt){
       return Q.fcall(function () {
         config.pkg.version = config.newVersion;
         grunt.file.write(config.file, JSON.stringify(config.pkg, null, '  ') + '\n');
-        grunt.log.ok('bumped version to ' + config.newVersion);
+        grunt.log.ok('bumped package version to ' + config.newVersion);
+      });
+    }
+
+    function before(){
+      return Q.fcall(function () {
+        config.before();
+        grunt.log.ok('ran before commands');
+      });
+    }
+
+    function bumpBower(){
+      return Q.fcall(function () {
+        config.bower.version = config.newBowerVersion;
+        grunt.file.write(config.bowerFile, JSON.stringify(config.bower, null, '  ') + '\n');
+        grunt.log.ok('bumped bower version to ' + config.newBowerVersion);
       });
     }
 
     function githubRelease(){
       var deferred = Q.defer();
-      if (nowrite){ 
+      if (nowrite){
         success();
         return;
       }
@@ -157,7 +188,7 @@ module.exports = function(grunt){
         .end(function(res){
           if (res.statusCode === 201){
             success();
-          } 
+          }
           else {
             deferred.reject('Error creating github release. Response: ' + res.text);
           }
