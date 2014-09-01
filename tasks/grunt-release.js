@@ -62,14 +62,14 @@ module.exports = function(grunt){
 
 
     function setup(before, file, bowerFile, type){
-      var pkg = grunt.file.readJSON(file);
-      var bower = grunt.file.readJSON(bowerFile);
-      var newVersion = pkg.version;
-      var newBowerVersion = bower.version;
+      var pkg = grunt.file.readJSON(file),
+        newVersion = pkg.version,
+        bower, newBowerVersion;
       if (options.bump) {
         newVersion = semver.inc(pkg.version, type || 'patch');
       }
-      if (options.bumpBower) {
+      if (grunt.file.exists(bowerFile) && options.bumpBower) {
+        bower = grunt.file.readJSON(bowerFile);
         newBowerVersion = semver.inc(bower.version, type || 'patch');
       }
       return {
