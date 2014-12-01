@@ -26,6 +26,7 @@ module.exports = function(grunt){
       pushTags: true,
       npm : true
     });
+    var prereleasePrefix = grunt.config.get('release.options.prereleasePrefix');
 
     var config = setup(options.before, options.file, options.bowerFile, type);
     var templateOptions = {
@@ -65,13 +66,18 @@ module.exports = function(grunt){
       var pkg = grunt.file.readJSON(file),
         newVersion = pkg.version,
         bower, newBowerVersion;
+
       if (options.bump) {
+        pkg.version = prefix(pkg.version);
         newVersion = semver.inc(pkg.version, type || 'patch');
       }
+
       if (grunt.file.exists(bowerFile) && options.bumpBower) {
         bower = grunt.file.readJSON(bowerFile);
+        bower.version = prefix(bower.version);
         newBowerVersion = semver.inc(bower.version, type || 'patch');
       }
+
       return {
         file: file,
         bowerFile: bowerFile,
@@ -81,6 +87,13 @@ module.exports = function(grunt){
         newBowerVersion: newBowerVersion,
         before: before
       };
+    }
+
+    function prefix (version) {
+      if(type === 'prerelease' && prereleasePrefix && version.indexOf(prereleasePrefix) === -1) {
+        version = version += prereleasePrefix;
+      }
+      return version;
     }
 
     function getNpmTag(){
